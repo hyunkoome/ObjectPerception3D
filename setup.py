@@ -29,10 +29,10 @@ def write_version_to_file(version, target_file):
 
 if __name__ == '__main__':
     version = '0.0.1+%s' % get_git_commit_number()
-    write_version_to_file(version, 'lidardet/version.py')
+    write_version_to_file(version, 'lidar/version.py')
 
     setup(
-        name='lidardet',
+        name='lidar',
         version=version,
         description='OpenPCDet is a general codebase for 3D object detection from point cloud',
         install_requires=[
