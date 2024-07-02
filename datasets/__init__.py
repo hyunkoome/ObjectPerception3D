@@ -9,7 +9,8 @@ from utils import common_utils
 from datasets.dataset import DatasetTemplate
 # from .kitti.kitti_dataset import KittiDataset
 # from .nuscenes.nuscenes_dataset import NuScenesDataset
-from datasets.waymo.waymo_dataset import WaymoDataset
+# from datasets.waymo.waymo_dataset import WaymoDataset
+from datasets.waymo.create_waymo_dataset import CreateWaymoDataset
 # from .pandaset.pandaset_dataset import PandasetDataset
 # from .lyft.lyft_dataset import LyftDataset
 # from .once.once_dataset import ONCEDataset
@@ -20,7 +21,8 @@ __all__ = {
     'DatasetTemplate': DatasetTemplate,
     # 'KittiDataset': KittiDataset,
     # 'NuScenesDataset': NuScenesDataset,
-    'WaymoDataset': WaymoDataset,
+    # 'WaymoDataset': WaymoDataset,
+    'WaymoDataset': CreateWaymoDataset,
     # 'PandasetDataset': PandasetDataset,
     # 'LyftDataset': LyftDataset,
     # 'ONCEDataset': ONCEDataset,
