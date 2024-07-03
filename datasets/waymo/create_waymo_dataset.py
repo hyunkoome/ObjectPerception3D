@@ -70,8 +70,8 @@ class CreateWaymoDataset(DatasetTemplate):
         return seq_name_to_infos
 
     # OK
-    def get_infos(self, raw_data_path, save_path, num_workers=multiprocessing.cpu_count(), has_label=True,
-                  sampled_interval=1):
+    def get_dataset_infos(self, raw_data_path, save_path, num_workers=multiprocessing.cpu_count(), has_label=True,
+                          sampled_interval=1):
         from datasets.waymo import waymo_utils
         print('---------------The waymo sample interval is %d, total sequecnes is %d-----------------'
               % (sampled_interval, len(self.sample_sequence_list)))
