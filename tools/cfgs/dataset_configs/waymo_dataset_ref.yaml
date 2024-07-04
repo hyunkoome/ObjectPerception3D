@@ -1,17 +1,26 @@
-DATASET: 'WaymoDataset'
-DATA_PATH: '../data/waymo'
-PROCESSED_DATA_TAG: 'waymo_processed_data_v0_5_0'
+DATASET:
+  types: 'WaymoDataset'
+  DATA_PATH: './data/waymo'
+  PROCESSED_DATA_TAG: 'waymo_processed_data_v0_5_0'
+  DATA_CLASS_NAMES_LIST: [ 'Vehicle', 'Pedestrian', 'Cyclist' ]
+  DATA_SPLIT: {
+                train: train_ref,
+                test: val_ref
+  }
+  SAMPLED_INTERVAL: {
+                      'train': 5,
+                      'test': 1
+  }
 
 POINT_CLOUD_RANGE: [ -75.2, -75.2, -2, 75.2, 75.2, 4 ]
-
-DATA_SPLIT:
-  train: train_ref
-  test: val_ref
-
-SAMPLED_INTERVAL: {
-  'train': 5,
-  'test': 1
+POINT_FEATURE_ENCODING: {
+  encoding_type: absolute_coordinates_encoding,
+  used_feature_list: [ 'x', 'y', 'z', 'intensity' ],
+  #src_feature_list: ['x', 'y', 'z', 'intensity', 'elongation'],
+  src_feature_list: [ 'x', 'y', 'z', 'intensity', 'elongation' ],
 }
+#  DATA_PROCESSOR:
+#    - NAME: mask_points_and_boxes_outside_range
 
 FILTER_EMPTY_BOXES_FOR_TRAIN: True
 DISABLE_NLZ_FLAG_ON_POINTS: True
@@ -57,12 +66,7 @@ DATA_AUGMENTOR:
       WORLD_SCALE_RANGE: [ 0.95, 1.05 ]
 
 
-POINT_FEATURE_ENCODING: {
-  encoding_type: absolute_coordinates_encoding,
-  used_feature_list: [ 'x', 'y', 'z', 'intensity' ],
-  #src_feature_list: ['x', 'y', 'z', 'intensity', 'elongation'],
-  src_feature_list: [ 'x', 'y', 'z', 'intensity', 'elongation' ],
-}
+
 
 
 DATA_PROCESSOR:

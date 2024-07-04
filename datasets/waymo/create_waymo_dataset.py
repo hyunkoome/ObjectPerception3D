@@ -8,28 +8,30 @@ from pathlib import Path
 from functools import partial
 
 from ops.roiaware_pool3d import roiaware_pool3d_utils
-from datasets.dataset import DatasetTemplate
 from utils.create_dataset_utils import check_sequence_name_with_all_version
+import torch.utils.data as torch_data
+from datasets.waymo import waymo_utils
 
 
-class CreateWaymoDataset(DatasetTemplate):
-    def __init__(self, dataset_cfg, class_names, training=True, root_path=None, logger=None):
-        super().__init__(
-            dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger
-        )
-        self.data_path = os.path.join(self.root_path, self.dataset_cfg['PROCESSED_DATA_TAG'])
-        self.split = dict(train=self.dataset_cfg['DATA_SPLIT']['train'], test=self.dataset_cfg['DATA_SPLIT']['test'])
+class CreateWaymoDataset(torch_data.Dataset):
+    def __init__(self, dataset_cfg=None, root_path=None, logger=None):
+        super().__init__()
+        self.dataset_cfg = dataset_cfg
+        self.root_path = root_path
+        self.data_and_save_path = Path(self.root_path).joinpath(self.dataset_cfg['DATA_PATH'])
+        self.class_names = self.dataset_cfg['DATA_CLASS_NAMES_LIST']
+        self.logger = logger
 
-    def set_split(self, split):
-        super().__init__(
-            dataset_cfg=self.dataset_cfg, class_names=self.class_names, training=self.training,
-            root_path=self.root_path, logger=self.logger
-        )
+        self.data_path = Path(self.data_and_save_path).joinpath(self.dataset_cfg['PROCESSED_DATA_TAG'])
+        self.split = self.dataset_cfg['DATA_SPLIT']
 
-        split_dir = os.path.join(self.root_path, 'ImageSets', '{}.txt'.format(self.split[split]))
+    def set_split(self, split_name):
+        split_dir = os.path.join(self.data_and_save_path, 'ImageSets', '{}.txt'.format(self.split[split_name]))
         self.sample_sequence_list = [x.strip() for x in open(split_dir).readlines()]
         self.infos = []
-        self.seq_name_to_infos = self.include_waymo_data(mode=split)
+        self.include_waymo_data(mode=split_name)
+        # self.seq_name_to_infos = self.include_waymo_data(mode=split_name)
+        # print()
 
     def include_waymo_data(self, mode):
         self.logger.info('Loading Waymo dataset')
@@ -57,31 +59,34 @@ class CreateWaymoDataset(DatasetTemplate):
 
         if self.dataset_cfg['SAMPLED_INTERVAL'][mode] > 1:
             sampled_waymo_infos = []
-            # for k in range(0, len(self.infos), self.dataset_cfg.SAMPLED_INTERVAL[mode]):
             for k in range(0, len(self.infos), self.dataset_cfg['SAMPLED_INTERVAL'][mode]):
                 sampled_waymo_infos.append(self.infos[k])
             self.infos = sampled_waymo_infos
-            self.logger.info('Total sampled samples for Waymo dataset: %d' % len(self.infos))
+            self.logger.info('Total sampled samples for Waymo dataset: {}: {}'.format(mode, len(self.infos)))
 
-        use_sequence_data = self.dataset_cfg.get('SEQUENCE_CONFIG',
-                                                 None) is not None and self.dataset_cfg['SEQUENCE_CONFIG']['ENABLED']
-        if not use_sequence_data:
-            seq_name_to_infos = None
-        return seq_name_to_infos
+        # use_sequence_data = self.dataset_cfg.get('SEQUENCE_CONFIG',
+        #                                          None) is not None and self.dataset_cfg['SEQUENCE_CONFIG']['ENABLED']
+        # if not use_sequence_data:
+        #     seq_name_to_infos = None
+        # return seq_name_to_infos
 
     # OK
-    def get_dataset_infos(self, raw_data_path, save_path, num_workers=multiprocessing.cpu_count(), has_label=True,
-                          sampled_interval=1):
-        from datasets.waymo import waymo_utils
+    def get_dataset_infos(self, num_workers: int = multiprocessing.cpu_count(), has_label: bool = True,
+                          split_name: str = 'train'):
+
         print('---------------The waymo sample interval is %d, total sequecnes is %d-----------------'
-              % (sampled_interval, len(self.sample_sequence_list)))
+              % (self.dataset_cfg['SAMPLED_INTERVAL'][split_name], len(self.sample_sequence_list)))
 
         process_single_sequence = partial(
             waymo_utils.process_single_sequence,
-            save_path=save_path, sampled_interval=sampled_interval, has_label=has_label
+            save_path=Path(self.data_and_save_path).joinpath(self.dataset_cfg['PROCESSED_DATA_TAG']),
+            sampled_interval=self.dataset_cfg['SAMPLED_INTERVAL'][split_name],
+            has_label=has_label
         )
+
         sample_sequence_file_list = [
-            check_sequence_name_with_all_version(Path(os.path.join(raw_data_path, sequence_file)))
+            check_sequence_name_with_all_version(
+                sequence_file=Path(self.data_and_save_path).joinpath('raw_data').joinpath(sequence_file))
             for sequence_file in self.sample_sequence_list
         ]
 
@@ -90,7 +95,17 @@ class CreateWaymoDataset(DatasetTemplate):
                                        total=len(sample_sequence_file_list)))
 
         all_sequences_infos = [item for infos in sequence_infos for item in infos]
-        return all_sequences_infos
+
+        filename = Path(self.data_and_save_path).joinpath(
+            f"{self.dataset_cfg['PROCESSED_DATA_TAG']}_infos_{split_name}.pkl")
+
+        with open(filename, 'wb') as f:
+            pickle.dump(all_sequences_infos, f)
+            print(f'-----------Waymo info file for {split_name} is saved to {filename}---------------')
+
+        return filename
+
+    # return all_sequences_infos
 
     def get_lidar(self, sequence_name, sample_idx):
         lidar_file = os.path.join(self.data_path, sequence_name, '{:04d}.npy'.format(sample_idx))
@@ -106,19 +121,22 @@ class CreateWaymoDataset(DatasetTemplate):
                 points_all[:, dim_idx] = np.tanh(points_all[:, dim_idx])
         return points_all
 
-    # OK
-    def create_groundtruth_database(self, info_path, save_path, used_classes=None, split='train', sampled_interval=1,
-                                    processed_data_tag=None):
+    def create_groundtruth_database(self, info_file_path, split_mode='train'):
+        used_classes = self.dataset_cfg['DATA_CLASS_NAMES_LIST']
+        processed_data_tag = self.dataset_cfg['PROCESSED_DATA_TAG']
+        sampled_interval = self.dataset_cfg['SAMPLED_INTERVAL'][split_mode]
+        save_path = self.data_and_save_path
+
         database_save_path = save_path / (
-                '%s_gt_database_%s_sampled_%d' % (processed_data_tag, split, sampled_interval))
+                '%s_gt_database_%s_sampled_%d' % (processed_data_tag, split_mode, sampled_interval))
         db_info_save_path = save_path / (
-                '%s_waymo_dbinfos_%s_sampled_%d.pkl' % (processed_data_tag, split, sampled_interval))
+                '%s_waymo_dbinfos_%s_sampled_%d.pkl' % (processed_data_tag, split_mode, sampled_interval))
         db_data_save_path = save_path / (
-                '%s_gt_database_%s_sampled_%d_global.npy' % (processed_data_tag, split, sampled_interval))
+                '%s_gt_database_%s_sampled_%d_global.npy' % (processed_data_tag, split_mode, sampled_interval))
 
         database_save_path.mkdir(parents=True, exist_ok=True)
         all_db_infos = {}
-        with open(info_path, 'rb') as f:
+        with open(info_file_path, 'rb') as f:
             infos = pickle.load(f)
 
         point_offset_cnt = 0
@@ -183,6 +201,7 @@ class CreateWaymoDataset(DatasetTemplate):
                         all_db_infos[names[i]].append(db_info)
                     else:
                         all_db_infos[names[i]] = [db_info]
+
         for k, v in all_db_infos.items():
             print('Database %s: %d' % (k, len(v)))
 
