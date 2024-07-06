@@ -9,11 +9,11 @@ from functools import partial
 
 from ops.roiaware_pool3d import roiaware_pool3d_utils
 from utils.create_dataset_utils import check_sequence_name_with_all_version
-import torch.utils.data as torch_data
+# import torch.utils.data
 from datasets.waymo import waymo_utils
 
 
-class CreateWaymoDataset(torch_data.Dataset):
+class CreateWaymoDataset(torch.utils.data.Dataset):
     def __init__(self, dataset_cfg=None, root_path=None, logger=None):
         super().__init__()
         self.dataset_cfg = dataset_cfg
