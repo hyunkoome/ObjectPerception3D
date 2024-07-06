@@ -10,19 +10,6 @@ from datasets.augmentor.data_augmentor import DataAugmentor
 from datasets.processor.data_processor import DataProcessor
 from datasets.processor.point_feature_encoder import PointFeatureEncoder
 
-# from collections import defaultdict
-# from pathlib import Path
-#
-# import numpy as np
-# import torch
-# import torch.utils.data as torch_data
-#
-# from ..utils import common_utils
-# from .augmentor.data_augmentor import DataAugmentor
-# from .processor.data_processor import DataProcessor
-# from .processor.point_feature_encoder import PointFeatureEncoder
-
-
 class DatasetTemplate(torch_data.Dataset):
     def __init__(self, dataset_cfg=None, class_names=None, training=True, root_path=None, logger=None):
         super().__init__()
