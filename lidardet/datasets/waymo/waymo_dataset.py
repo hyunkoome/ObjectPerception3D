@@ -25,10 +25,8 @@ class WaymoDataset(DatasetTemplate):
         super().__init__(
             dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger
         )
-        # self.data_path = self.root_path / self.dataset_cfg.PROCESSED_DATA_TAG
-        self.data_path = self.root_path / self.dataset_cfg['PROCESSED_DATA_TAG']
-        # self.split = self.dataset_cfg.DATA_SPLIT[self.mode]
-        self.split = self.dataset_cfg['DATA_SPLIT'][self.mode]
+        self.data_path = self.root_path / self.dataset_cfg.PROCESSED_DATA_TAG
+        self.split = self.dataset_cfg.DATA_SPLIT[self.mode]
         split_dir = self.root_path / 'ImageSets' / (self.split + '.txt')
         self.sample_sequence_list = [x.strip() for x in open(split_dir).readlines()]
 
@@ -42,8 +40,7 @@ class WaymoDataset(DatasetTemplate):
 
         if self.dataset_cfg.get('USE_PREDBOX', False):
             self.pred_boxes_dict = self.load_pred_boxes_to_dict(
-                # pred_boxes_path=self.dataset_cfg.ROI_BOXES_PATH[self.mode]
-                pred_boxes_path = self.dataset_cfg['ROI_BOXES_PATH'][self.mode]
+                pred_boxes_path=self.dataset_cfg.ROI_BOXES_PATH[self.mode]
             )
         else:
             self.pred_boxes_dict = {}
@@ -82,20 +79,17 @@ class WaymoDataset(DatasetTemplate):
         self.logger.info('Total skipped info %s' % num_skipped_infos)
         self.logger.info('Total samples for Waymo dataset: %d' % (len(waymo_infos)))
 
-        # if self.dataset_cfg.SAMPLED_INTERVAL[mode] > 1:
-        if self.dataset_cfg['SAMPLED_INTERVAL'][mode] > 1:
+        if self.dataset_cfg.SAMPLED_INTERVAL[mode] > 1:
             sampled_waymo_infos = []
-            # for k in range(0, len(self.infos), self.dataset_cfg.SAMPLED_INTERVAL[mode]):
-            for k in range(0, len(self.infos), self.dataset_cfg['SAMPLED_INTERVAL'][mode]):
+            for k in range(0, len(self.infos), self.dataset_cfg.SAMPLED_INTERVAL[mode]):
                 sampled_waymo_infos.append(self.infos[k])
             self.infos = sampled_waymo_infos
             self.logger.info('Total sampled samples for Waymo dataset: %d' % len(self.infos))
-            
-        # use_sequence_data = self.dataset_cfg.get('SEQUENCE_CONFIG', None) is not None and self.dataset_cfg.SEQUENCE_CONFIG.ENABLED
+
         use_sequence_data = self.dataset_cfg.get('SEQUENCE_CONFIG',
-                                                 None) is not None and self.dataset_cfg['SEQUENCE_CONFIG']['ENABLED']
+                                                 None) is not None and self.dataset_cfg.SEQUENCE_CONFIG.ENABLED
         if not use_sequence_data:
-            seq_name_to_infos = None 
+            seq_name_to_infos = None
         return seq_name_to_infos
 
     def load_pred_boxes_to_dict(self, pred_boxes_path):
@@ -111,8 +105,10 @@ class WaymoDataset(DatasetTemplate):
             if seq_name not in pred_boxes_dict:
                 pred_boxes_dict[seq_name] = {}
 
-            pred_labels = np.array([self.class_names.index(box_dict['name'][k]) + 1 for k in range(box_dict['name'].shape[0])])
-            pred_boxes = np.concatenate((box_dict['boxes_lidar'], box_dict['score'][:, np.newaxis], pred_labels[:, np.newaxis]), axis=-1)
+            pred_labels = np.array(
+                [self.class_names.index(box_dict['name'][k]) + 1 for k in range(box_dict['name'].shape[0])])
+            pred_boxes = np.concatenate(
+                (box_dict['boxes_lidar'], box_dict['score'][:, np.newaxis], pred_labels[:, np.newaxis]), axis=-1)
             pred_boxes_dict[seq_name][sample_idx] = pred_boxes
 
         self.logger.info(f'Predicted boxes has been loaded, total sequences: {len(pred_boxes_dict)}')
@@ -178,14 +174,16 @@ class WaymoDataset(DatasetTemplate):
                 sequence_file = found_sequence_file
         return sequence_file
 
-    def get_infos(self, raw_data_path, save_path, num_workers=multiprocessing.cpu_count(), has_label=True, sampled_interval=1, update_info_only=False):
+    def get_infos(self, raw_data_path, save_path, num_workers=multiprocessing.cpu_count(), has_label=True,
+                  sampled_interval=1, update_info_only=False):
         from . import waymo_utils
         print('---------------The waymo sample interval is %d, total sequecnes is %d-----------------'
               % (sampled_interval, len(self.sample_sequence_list)))
 
         process_single_sequence = partial(
             waymo_utils.process_single_sequence,
-            save_path=save_path, sampled_interval=sampled_interval, has_label=has_label, update_info_only=update_info_only
+            save_path=save_path, sampled_interval=sampled_interval, has_label=has_label,
+            update_info_only=update_info_only
         )
         sample_sequence_file_list = [
             self.check_sequence_name_with_all_version(raw_data_path / sequence_file)
@@ -230,18 +228,18 @@ class WaymoDataset(DatasetTemplate):
         expand_bboxes = np.concatenate([pred_boxes3d[:, :3], np.ones((pred_boxes3d.shape[0], 1))], axis=-1)
 
         bboxes_global = np.dot(expand_bboxes, pose_pre.T)[:, :3]
-        expand_bboxes_global = np.concatenate([bboxes_global[:, :3],np.ones((bboxes_global.shape[0], 1))], axis=-1)
+        expand_bboxes_global = np.concatenate([bboxes_global[:, :3], np.ones((bboxes_global.shape[0], 1))], axis=-1)
         bboxes_pre2cur = np.dot(expand_bboxes_global, np.linalg.inv(pose_cur.T))[:, :3]
         pred_boxes3d[:, 0:3] = bboxes_pre2cur
 
         if pred_boxes3d.shape[-1] == 11:
             expand_vels = np.concatenate([pred_boxes3d[:, 7:9], np.zeros((pred_boxes3d.shape[0], 1))], axis=-1)
             vels_global = np.dot(expand_vels, pose_pre[:3, :3].T)
-            vels_pre2cur = np.dot(vels_global, np.linalg.inv(pose_cur[:3, :3].T))[:,:2]
+            vels_pre2cur = np.dot(vels_global, np.linalg.inv(pose_cur[:3, :3].T))[:, :2]
             pred_boxes3d[:, 7:9] = vels_pre2cur
 
-        pred_boxes3d[:, 6]  = pred_boxes3d[..., 6] + np.arctan2(pose_pre[..., 1, 0], pose_pre[..., 0, 0])
-        pred_boxes3d[:, 6]  = pred_boxes3d[..., 6] - np.arctan2(pose_cur[..., 1, 0], pose_cur[..., 0, 0])
+        pred_boxes3d[:, 6] = pred_boxes3d[..., 6] + np.arctan2(pose_pre[..., 1, 0], pose_pre[..., 0, 0])
+        pred_boxes3d[:, 6] = pred_boxes3d[..., 6] - np.arctan2(pose_cur[..., 1, 0], pose_cur[..., 0, 0])
         return pred_boxes3d
 
     @staticmethod
@@ -281,7 +279,8 @@ class WaymoDataset(DatasetTemplate):
 
         pose_cur = info['pose'].reshape((4, 4))
         num_pts_cur = points.shape[0]
-        sample_idx_pre_list = np.clip(sample_idx + np.arange(sequence_cfg.SAMPLE_OFFSET[0], sequence_cfg.SAMPLE_OFFSET[1]), 0, 0x7FFFFFFF)
+        sample_idx_pre_list = np.clip(
+            sample_idx + np.arange(sequence_cfg.SAMPLE_OFFSET[0], sequence_cfg.SAMPLE_OFFSET[1]), 0, 0x7FFFFFFF)
         sample_idx_pre_list = sample_idx_pre_list[::-1]
 
         if sequence_cfg.get('ONEHOT_TIMESTAMP', False):
@@ -307,7 +306,8 @@ class WaymoDataset(DatasetTemplate):
             pose_pre = sequence_info[sample_idx_pre]['pose'].reshape((4, 4))
             expand_points_pre = np.concatenate([points_pre[:, :3], np.ones((points_pre.shape[0], 1))], axis=-1)
             points_pre_global = np.dot(expand_points_pre, pose_pre.T)[:, :3]
-            expand_points_pre_global = np.concatenate([points_pre_global, np.ones((points_pre_global.shape[0], 1))], axis=-1)
+            expand_points_pre_global = np.concatenate([points_pre_global, np.ones((points_pre_global.shape[0], 1))],
+                                                      axis=-1)
             points_pre2cur = np.dot(expand_points_pre_global, np.linalg.inv(pose_cur.T))[:, :3]
             points_pre = np.concatenate([points_pre2cur, points_pre[:, 3:]], axis=-1)
             if sequence_cfg.get('ONEHOT_TIMESTAMP', False):
@@ -316,7 +316,9 @@ class WaymoDataset(DatasetTemplate):
                 points_pre = np.hstack([points_pre, onehot_vector])
             else:
                 # add timestamp
-                points_pre = np.hstack([points_pre, 0.1 * (sample_idx - sample_idx_pre) * np.ones((points_pre.shape[0], 1)).astype(points_pre.dtype)])  # one frame 0.1s
+                points_pre = np.hstack([points_pre,
+                                        0.1 * (sample_idx - sample_idx_pre) * np.ones((points_pre.shape[0], 1)).astype(
+                                            points_pre.dtype)])  # one frame 0.1s
             points_pre = remove_ego_points(points_pre, 1.0)
             points_pre_all.append(points_pre)
             num_points_pre.append(points_pre.shape[0])
@@ -470,19 +472,28 @@ class WaymoDataset(DatasetTemplate):
     def create_groundtruth_database(self, info_path, save_path, used_classes=None, split='train', sampled_interval=10,
                                     processed_data_tag=None):
 
-        use_sequence_data = self.dataset_cfg.get('SEQUENCE_CONFIG', None) is not None and self.dataset_cfg.SEQUENCE_CONFIG.ENABLED
+        use_sequence_data = self.dataset_cfg.get('SEQUENCE_CONFIG',
+                                                 None) is not None and self.dataset_cfg.SEQUENCE_CONFIG.ENABLED
 
         if use_sequence_data:
-            st_frame, ed_frame = self.dataset_cfg.SEQUENCE_CONFIG.SAMPLE_OFFSET[0], self.dataset_cfg.SEQUENCE_CONFIG.SAMPLE_OFFSET[1]
-            self.dataset_cfg.SEQUENCE_CONFIG.SAMPLE_OFFSET[0] = min(-4, st_frame)  # at least we use 5 frames for generating gt database to support various sequence configs (<= 5 frames)
+            st_frame, ed_frame = self.dataset_cfg.SEQUENCE_CONFIG.SAMPLE_OFFSET[0], \
+            self.dataset_cfg.SEQUENCE_CONFIG.SAMPLE_OFFSET[1]
+            self.dataset_cfg.SEQUENCE_CONFIG.SAMPLE_OFFSET[0] = min(-4,
+                                                                    st_frame)  # at least we use 5 frames for generating gt database to support various sequence configs (<= 5 frames)
             st_frame = self.dataset_cfg.SEQUENCE_CONFIG.SAMPLE_OFFSET[0]
-            database_save_path = save_path / ('%s_gt_database_%s_sampled_%d_multiframe_%s_to_%s' % (processed_data_tag, split, sampled_interval, st_frame, ed_frame))
-            db_info_save_path = save_path / ('%s_waymo_dbinfos_%s_sampled_%d_multiframe_%s_to_%s.pkl' % (processed_data_tag, split, sampled_interval, st_frame, ed_frame))
-            db_data_save_path = save_path / ('%s_gt_database_%s_sampled_%d_multiframe_%s_to_%s_global.npy' % (processed_data_tag, split, sampled_interval, st_frame, ed_frame))
+            database_save_path = save_path / ('%s_gt_database_%s_sampled_%d_multiframe_%s_to_%s' % (
+            processed_data_tag, split, sampled_interval, st_frame, ed_frame))
+            db_info_save_path = save_path / ('%s_waymo_dbinfos_%s_sampled_%d_multiframe_%s_to_%s.pkl' % (
+            processed_data_tag, split, sampled_interval, st_frame, ed_frame))
+            db_data_save_path = save_path / ('%s_gt_database_%s_sampled_%d_multiframe_%s_to_%s_global.npy' % (
+            processed_data_tag, split, sampled_interval, st_frame, ed_frame))
         else:
-            database_save_path = save_path / ('%s_gt_database_%s_sampled_%d' % (processed_data_tag, split, sampled_interval))
-            db_info_save_path = save_path / ('%s_waymo_dbinfos_%s_sampled_%d.pkl' % (processed_data_tag, split, sampled_interval))
-            db_data_save_path = save_path / ('%s_gt_database_%s_sampled_%d_global.npy' % (processed_data_tag, split, sampled_interval))
+            database_save_path = save_path / (
+                        '%s_gt_database_%s_sampled_%d' % (processed_data_tag, split, sampled_interval))
+            db_info_save_path = save_path / (
+                        '%s_waymo_dbinfos_%s_sampled_%d.pkl' % (processed_data_tag, split, sampled_interval))
+            db_data_save_path = save_path / (
+                        '%s_gt_database_%s_sampled_%d_global.npy' % (processed_data_tag, split, sampled_interval))
 
         database_save_path.mkdir(parents=True, exist_ok=True)
         all_db_infos = {}
@@ -567,7 +578,8 @@ class WaymoDataset(DatasetTemplate):
         stacked_gt_points = np.concatenate(stacked_gt_points, axis=0)
         np.save(db_data_save_path, stacked_gt_points)
 
-    def create_gt_database_of_single_scene(self, info_with_idx, database_save_path=None, use_sequence_data=False, used_classes=None,
+    def create_gt_database_of_single_scene(self, info_with_idx, database_save_path=None, use_sequence_data=False,
+                                           used_classes=None,
                                            total_samples=0, use_cuda=False, crop_gt_with_tail=False):
         info, info_idx = info_with_idx
         print('gt_database sample: %d/%d' % (info_idx, total_samples))
@@ -652,9 +664,9 @@ class WaymoDataset(DatasetTemplate):
 
                 db_path = str(filepath.relative_to(self.root_path))  # gt_database/xxxxx.bin
                 db_info = {'name': names[i], 'path': db_path, 'sequence_name': sequence_name,
-                            'sample_idx': sample_idx, 'gt_idx': i, 'box3d_lidar': gt_boxes[i],
-                            'num_points_in_gt': gt_points.shape[0], 'difficulty': difficulty[i],
-                            'box3d_crop': gt_boxes_crop[i]}
+                           'sample_idx': sample_idx, 'gt_idx': i, 'box3d_lidar': gt_boxes[i],
+                           'num_points_in_gt': gt_points.shape[0], 'difficulty': difficulty[i],
+                           'box3d_crop': gt_boxes_crop[i]}
 
                 if names[i] in all_db_infos:
                     all_db_infos[names[i]].append(db_info)
@@ -662,19 +674,27 @@ class WaymoDataset(DatasetTemplate):
                     all_db_infos[names[i]] = [db_info]
         return all_db_infos
 
-    def create_groundtruth_database_parallel(self, info_path, save_path, used_classes=None, split='train', sampled_interval=10,
+    def create_groundtruth_database_parallel(self, info_path, save_path, used_classes=None, split='train',
+                                             sampled_interval=10,
                                              processed_data_tag=None, num_workers=16, crop_gt_with_tail=False):
-        use_sequence_data = self.dataset_cfg.get('SEQUENCE_CONFIG', None) is not None and self.dataset_cfg.SEQUENCE_CONFIG.ENABLED
+        use_sequence_data = self.dataset_cfg.get('SEQUENCE_CONFIG',
+                                                 None) is not None and self.dataset_cfg.SEQUENCE_CONFIG.ENABLED
         if use_sequence_data:
-            st_frame, ed_frame = self.dataset_cfg.SEQUENCE_CONFIG.SAMPLE_OFFSET[0], self.dataset_cfg.SEQUENCE_CONFIG.SAMPLE_OFFSET[1]
-            self.dataset_cfg.SEQUENCE_CONFIG.SAMPLE_OFFSET[0] = min(-4, st_frame)  # at least we use 5 frames for generating gt database to support various sequence configs (<= 5 frames)
+            st_frame, ed_frame = self.dataset_cfg.SEQUENCE_CONFIG.SAMPLE_OFFSET[0], \
+            self.dataset_cfg.SEQUENCE_CONFIG.SAMPLE_OFFSET[1]
+            self.dataset_cfg.SEQUENCE_CONFIG.SAMPLE_OFFSET[0] = min(-4,
+                                                                    st_frame)  # at least we use 5 frames for generating gt database to support various sequence configs (<= 5 frames)
             st_frame = self.dataset_cfg.SEQUENCE_CONFIG.SAMPLE_OFFSET[0]
-            database_save_path = save_path / ('%s_gt_database_%s_sampled_%d_multiframe_%s_to_%s_%sparallel' % (processed_data_tag, split, sampled_interval, st_frame, ed_frame, 'tail_' if crop_gt_with_tail else ''))
-            db_info_save_path = save_path / ('%s_waymo_dbinfos_%s_sampled_%d_multiframe_%s_to_%s_%sparallel.pkl' % (processed_data_tag, split, sampled_interval, st_frame, ed_frame, 'tail_' if crop_gt_with_tail else ''))
+            database_save_path = save_path / ('%s_gt_database_%s_sampled_%d_multiframe_%s_to_%s_%sparallel' % (
+            processed_data_tag, split, sampled_interval, st_frame, ed_frame, 'tail_' if crop_gt_with_tail else ''))
+            db_info_save_path = save_path / ('%s_waymo_dbinfos_%s_sampled_%d_multiframe_%s_to_%s_%sparallel.pkl' % (
+            processed_data_tag, split, sampled_interval, st_frame, ed_frame, 'tail_' if crop_gt_with_tail else ''))
         else:
-            database_save_path = save_path / ('%s_gt_database_%s_sampled_%d_parallel' % (processed_data_tag, split, sampled_interval))
-            db_info_save_path = save_path / ('%s_waymo_dbinfos_%s_sampled_%d_parallel.pkl' % (processed_data_tag, split, sampled_interval))
-            
+            database_save_path = save_path / (
+                        '%s_gt_database_%s_sampled_%d_parallel' % (processed_data_tag, split, sampled_interval))
+            db_info_save_path = save_path / (
+                        '%s_waymo_dbinfos_%s_sampled_%d_parallel.pkl' % (processed_data_tag, split, sampled_interval))
+
         database_save_path.mkdir(parents=True, exist_ok=True)
 
         with open(info_path, 'rb') as f:
@@ -705,6 +725,7 @@ class WaymoDataset(DatasetTemplate):
 
         with open(db_info_save_path, 'wb') as f:
             pickle.dump(all_db_infos, f)
+
 
 def create_waymo_infos(dataset_cfg, class_names, data_path, save_path,
                        raw_data_tag='raw_data', processed_data_tag='waymo_processed_data',
@@ -755,8 +776,8 @@ def create_waymo_infos(dataset_cfg, class_names, data_path, save_path,
 
 
 def create_waymo_gt_database(
-    dataset_cfg, class_names, data_path, save_path, processed_data_tag='waymo_processed_data',
-    workers=min(16, multiprocessing.cpu_count()), use_parallel=False, crop_gt_with_tail=False):
+        dataset_cfg, class_names, data_path, save_path, processed_data_tag='waymo_processed_data',
+        workers=min(16, multiprocessing.cpu_count()), use_parallel=False, crop_gt_with_tail=False):
     dataset = WaymoDataset(
         dataset_cfg=dataset_cfg, class_names=class_names, root_path=data_path,
         training=False, logger=common_utils.create_logger()
@@ -784,7 +805,7 @@ def create_waymo_gt_database(
 if __name__ == '__main__':
     import argparse
     import yaml
-    # from easydict import EasyDict
+    from easydict import EasyDict
 
     parser = argparse.ArgumentParser(description='arg parser')
     parser.add_argument('--cfg_file', type=str, default=None, help='specify the config of dataset')
@@ -803,10 +824,8 @@ if __name__ == '__main__':
             yaml_config = yaml.safe_load(open(args.cfg_file), Loader=yaml.FullLoader)
         except:
             yaml_config = yaml.safe_load(open(args.cfg_file))
-        # dataset_cfg = EasyDict(yaml_config)
-        dataset_cfg = dict(yaml_config)
-        # dataset_cfg.PROCESSED_DATA_TAG = args.processed_data_tag
-        dataset_cfg['PROCESSED_DATA_TAG'] = args.processed_data_tag
+        dataset_cfg = EasyDict(yaml_config)
+        dataset_cfg.PROCESSED_DATA_TAG = args.processed_data_tag
         create_waymo_infos(
             dataset_cfg=dataset_cfg,
             class_names=['Vehicle', 'Pedestrian', 'Cyclist'],
@@ -821,17 +840,15 @@ if __name__ == '__main__':
             yaml_config = yaml.safe_load(open(args.cfg_file), Loader=yaml.FullLoader)
         except:
             yaml_config = yaml.safe_load(open(args.cfg_file))
-        # dataset_cfg = EasyDict(yaml_config)
-        dataset_cfg = dict(yaml_config)
-        # dataset_cfg.PROCESSED_DATA_TAG = args.processed_data_tag
-        dataset_cfg['PROCESSED_DATA_TAG'] = args.processed_data_tag
+        dataset_cfg = EasyDict(yaml_config)
+        dataset_cfg.PROCESSED_DATA_TAG = args.processed_data_tag
         create_waymo_gt_database(
             dataset_cfg=dataset_cfg,
             class_names=['Vehicle', 'Pedestrian', 'Cyclist'],
             data_path=ROOT_DIR / 'data' / 'waymo',
             save_path=ROOT_DIR / 'data' / 'waymo',
             processed_data_tag=args.processed_data_tag,
-            use_parallel=args.use_parallel, 
+            use_parallel=args.use_parallel,
             crop_gt_with_tail=not args.wo_crop_gt_with_tail
         )
     else:

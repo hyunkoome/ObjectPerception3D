@@ -1,15 +1,14 @@
 import os
 import pickle
-import numpy as np
 import torch
 import multiprocessing
+import numpy as np
+
 from tqdm import tqdm
 from pathlib import Path
 from functools import partial
-
 from ops.roiaware_pool3d import roiaware_pool3d_utils
 from utils.create_dataset_utils import check_sequence_name_with_all_version
-# import torch.utils.data
 from datasets.waymo import waymo_utils
 
 
@@ -40,8 +39,10 @@ class CreateWaymoDataset(torch.utils.data.Dataset):
 
         num_skipped_infos = 0
         for k in range(len(self.sample_sequence_list)):
-            sequence_name = os.path.splitext(self.sample_sequence_list[k])[0]
+            # sequence_name = os.path.splitext(self.sample_sequence_list[k])[0]
+            sequence_name = Path(self.sample_sequence_list[k]).stem
             info_path = os.path.join(self.data_path, sequence_name, '{}.pkl'.format(sequence_name))
+            # info_path = Path(self.data_path)., sequence_name, '{}.pkl'.format(sequence_name))
             info_path = check_sequence_name_with_all_version(info_path)
 
             if not os.path.exists(info_path):

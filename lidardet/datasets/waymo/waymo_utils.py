@@ -108,7 +108,7 @@ def convert_range_image_to_point_cloud(frame, range_images, camera_projections, 
         range_image_top_pose_tensor_translation)
 
     for c in calibrations:
-        points_single, cp_points_single, points_NLZ_single, points_intensity_single, points_elongation_single \
+        points_single, cp_points_single, points_nlz_single, points_intensity_single, points_elongation_single \
             = [], [], [], [], []
         for cur_ri_index in ri_index:
             range_image = range_images[c.name][cur_ri_index]
@@ -131,7 +131,7 @@ def convert_range_image_to_point_cloud(frame, range_images, camera_projections, 
                 pixel_pose_local = tf.expand_dims(pixel_pose_local, axis=0)
                 frame_pose_local = tf.expand_dims(frame_pose, axis=0)
             range_image_mask = range_image_tensor[..., 0] > 0
-            range_image_NLZ = range_image_tensor[..., 3]
+            range_image_nlz = range_image_tensor[..., 3]
             range_image_intensity = range_image_tensor[..., 1]
             range_image_elongation = range_image_tensor[..., 2]
             range_image_cartesian = range_image_utils.extract_point_cloud_from_range_image(
@@ -144,7 +144,7 @@ def convert_range_image_to_point_cloud(frame, range_images, camera_projections, 
             range_image_cartesian = tf.squeeze(range_image_cartesian, axis=0)
             points_tensor = tf.gather_nd(range_image_cartesian,
                                          tf.where(range_image_mask))
-            points_NLZ_tensor = tf.gather_nd(range_image_NLZ, tf.compat.v1.where(range_image_mask))
+            points_nlz_tensor = tf.gather_nd(range_image_nlz, tf.compat.v1.where(range_image_mask))
             points_intensity_tensor = tf.gather_nd(range_image_intensity, tf.compat.v1.where(range_image_mask))
             points_elongation_tensor = tf.gather_nd(range_image_elongation, tf.compat.v1.where(range_image_mask))
             cp = camera_projections[c.name][0]
@@ -153,13 +153,13 @@ def convert_range_image_to_point_cloud(frame, range_images, camera_projections, 
 
             points_single.append(points_tensor.numpy())
             cp_points_single.append(cp_points_tensor.numpy())
-            points_NLZ_single.append(points_NLZ_tensor.numpy())
+            points_nlz_single.append(points_nlz_tensor.numpy())
             points_intensity_single.append(points_intensity_tensor.numpy())
             points_elongation_single.append(points_elongation_tensor.numpy())
 
         points.append(np.concatenate(points_single, axis=0))
         cp_points.append(np.concatenate(cp_points_single, axis=0))
-        points_NLZ.append(np.concatenate(points_NLZ_single, axis=0))
+        points_NLZ.append(np.concatenate(points_nlz_single, axis=0))
         points_intensity.append(np.concatenate(points_intensity_single, axis=0))
         points_elongation.append(np.concatenate(points_elongation_single, axis=0))
 
@@ -168,15 +168,16 @@ def convert_range_image_to_point_cloud(frame, range_images, camera_projections, 
 
 def save_lidar_points(frame, cur_save_path, use_two_returns=True):
     ret_outputs = frame_utils.parse_range_image_and_camera_projection(frame)
-    if len(ret_outputs) == 4:
-        range_images, camera_projections, seg_labels, range_image_top_pose = ret_outputs
-    else:
-        assert len(ret_outputs) == 3
-        range_images, camera_projections, range_image_top_pose = ret_outputs
+    range_images, camera_projections, seg_labels, range_image_top_pose = ret_outputs
+    # if len(ret_outputs) == 4:
+    #     range_images, camera_projections, seg_labels, range_image_top_pose = ret_outputs
+    # else:
+    #     assert len(ret_outputs) == 3
+    #     range_images, camera_projections, range_image_top_pose = ret_outputs
 
-    points, cp_points, points_in_NLZ_flag, points_intensity, points_elongation = convert_range_image_to_point_cloud(
-        frame, range_images, camera_projections, range_image_top_pose, ri_index=(0, 1) if use_two_returns else (0,)
-    )
+    points, cp_points, points_in_NLZ_flag, points_intensity, points_elongation = (
+        convert_range_image_to_point_cloud(frame, range_images, camera_projections, range_image_top_pose, ri_index=(0, 1) if use_two_returns else (0,)
+    ))
 
     # 3d points in vehicle frame.
     points_all = np.concatenate(points, axis=0)

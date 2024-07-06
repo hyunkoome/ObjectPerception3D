@@ -10,6 +10,19 @@ from datasets.augmentor.data_augmentor import DataAugmentor
 from datasets.processor.data_processor import DataProcessor
 from datasets.processor.point_feature_encoder import PointFeatureEncoder
 
+# from collections import defaultdict
+# from pathlib import Path
+#
+# import numpy as np
+# import torch
+# import torch.utils.data as torch_data
+#
+# from ..utils import common_utils
+# from .augmentor.data_augmentor import DataAugmentor
+# from .processor.data_processor import DataProcessor
+# from .processor.point_feature_encoder import PointFeatureEncoder
+
+
 class DatasetTemplate(torch_data.Dataset):
     def __init__(self, dataset_cfg=None, class_names=None, training=True, root_path=None, logger=None):
         super().__init__()
@@ -22,30 +35,33 @@ class DatasetTemplate(torch_data.Dataset):
         if self.dataset_cfg is None or class_names is None:
             return
 
-        # self.point_cloud_range = np.array(self.dataset_cfg['POINT_CLOUD_RANGE'], dtype=np.float32)
-        # self.point_feature_encoder = PointFeatureEncoder(
-        #     self.dataset_cfg['POINT_FEATURE_ENCODING'],
-        #     point_cloud_range=self.point_cloud_range
-        # )
+        # self.point_cloud_range = np.array(self.dataset_cfg.POINT_CLOUD_RANGE, dtype=np.float32)
+        self.point_cloud_range = np.array(self.dataset_cfg['POINT_CLOUD_RANGE'], dtype=np.float32)
+        self.point_feature_encoder = PointFeatureEncoder(
+            # self.dataset_cfg.POINT_FEATURE_ENCODING,
+            self.dataset_cfg['POINT_FEATURE_ENCODING'],
+            point_cloud_range=self.point_cloud_range
+        )
+        self.data_augmentor = DataAugmentor(
+            # self.root_path, self.dataset_cfg.DATA_AUGMENTOR, self.class_names, logger=self.logger
+            self.root_path, self.dataset_cfg['DATA_AUGMENTOR'], self.class_names, logger=self.logger
+        ) if self.training else None
+        self.data_processor = DataProcessor(
+            self.dataset_cfg['DATA_PROCESSOR'], point_cloud_range=self.point_cloud_range,
+            # self.dataset_cfg.DATA_PROCESSOR, point_cloud_range=self.point_cloud_range,
+            training=self.training, num_point_features=self.point_feature_encoder.num_point_features
+        )
 
-        # self.data_augmentor = DataAugmentor(
-        #     self.root_path, self.dataset_cfg['DATA_AUGMENTOR'], self.class_names, logger = self.logger
-        # ) if self.training else None
-        # self.data_processor = DataProcessor(
-        #     self.dataset_cfg['DATA_PROCESSOR'], point_cloud_range=self.point_cloud_range,
-        #     training=self.training, num_point_features=self.point_feature_encoder.num_point_features
-        # )
+        self.grid_size = self.data_processor.grid_size
+        self.voxel_size = self.data_processor.voxel_size
+        self.total_epochs = 0
+        self._merge_all_iters_to_one_epoch = False
 
-        # self.grid_size = self.data_processor.grid_size
-        # self.voxel_size = self.data_processor.voxel_size
-        # self.total_epochs = 0
-        # self._merge_all_iters_to_one_epoch = False
-        #
-        # if hasattr(self.data_processor, "depth_downsample_factor"):
-        #     self.depth_downsample_factor = self.data_processor.depth_downsample_factor
-        # else:
-        #     self.depth_downsample_factor = None
-            
+        if hasattr(self.data_processor, "depth_downsample_factor"):
+            self.depth_downsample_factor = self.data_processor.depth_downsample_factor
+        else:
+            self.depth_downsample_factor = None
+
     @property
     def mode(self):
         return 'train' if self.training else 'test'
@@ -73,7 +89,7 @@ class DatasetTemplate(torch_data.Dataset):
         Returns:
 
         """
-        
+
         def get_template_prediction(num_samples):
             box_dim = 9 if self.dataset_cfg.get('TRAIN_WITH_SPEED', False) else 7
             ret_dict = {
@@ -140,18 +156,18 @@ class DatasetTemplate(torch_data.Dataset):
             flip_x = data_dict['flip_x']
             flip_y = data_dict['flip_y']
             if flip_x:
-                lidar_aug_matrix[:3,:3] = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]]) @ lidar_aug_matrix[:3,:3]
+                lidar_aug_matrix[:3, :3] = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]]) @ lidar_aug_matrix[:3, :3]
             if flip_y:
-                lidar_aug_matrix[:3,:3] = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, 1]]) @ lidar_aug_matrix[:3,:3]
+                lidar_aug_matrix[:3, :3] = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, 1]]) @ lidar_aug_matrix[:3, :3]
         if 'noise_rot' in data_dict.keys():
             noise_rot = data_dict['noise_rot']
-            lidar_aug_matrix[:3,:3] = common_utils.angle2matrix(torch.tensor(noise_rot)) @ lidar_aug_matrix[:3,:3]
+            lidar_aug_matrix[:3, :3] = common_utils.angle2matrix(torch.tensor(noise_rot)) @ lidar_aug_matrix[:3, :3]
         if 'noise_scale' in data_dict.keys():
             noise_scale = data_dict['noise_scale']
-            lidar_aug_matrix[:3,:3] *= noise_scale
+            lidar_aug_matrix[:3, :3] *= noise_scale
         if 'noise_translate' in data_dict.keys():
             noise_translate = data_dict['noise_translate']
-            lidar_aug_matrix[:3,3:4] = noise_translate.T
+            lidar_aug_matrix[:3, 3:4] = noise_translate.T
         data_dict['lidar_aug_matrix'] = lidar_aug_matrix
         return data_dict
 
@@ -179,7 +195,7 @@ class DatasetTemplate(torch_data.Dataset):
         if self.training:
             assert 'gt_boxes' in data_dict, 'gt_boxes should be provided for training'
             gt_boxes_mask = np.array([n in self.class_names for n in data_dict['gt_names']], dtype=np.bool_)
-            
+
             if 'calib' in data_dict:
                 calib = data_dict['calib']
             data_dict = self.data_augmentor.forward(
@@ -237,7 +253,7 @@ class DatasetTemplate(torch_data.Dataset):
                 elif key in ['points', 'voxel_coords']:
                     coors = []
                     if isinstance(val[0], list):
-                        val =  [i for item in val for i in item]
+                        val = [i for item in val for i in item]
                     for i, coor in enumerate(val):
                         coor_pad = np.pad(coor, ((0, 0), (1, 0)), mode='constant', constant_values=i)
                         coors.append(coor_pad)
@@ -251,16 +267,17 @@ class DatasetTemplate(torch_data.Dataset):
 
                 elif key in ['roi_boxes']:
                     max_gt = max([x.shape[1] for x in val])
-                    batch_gt_boxes3d = np.zeros((batch_size, val[0].shape[0], max_gt, val[0].shape[-1]), dtype=np.float32)
+                    batch_gt_boxes3d = np.zeros((batch_size, val[0].shape[0], max_gt, val[0].shape[-1]),
+                                                dtype=np.float32)
                     for k in range(batch_size):
-                        batch_gt_boxes3d[k,:, :val[k].shape[1], :] = val[k]
+                        batch_gt_boxes3d[k, :, :val[k].shape[1], :] = val[k]
                     ret[key] = batch_gt_boxes3d
 
                 elif key in ['roi_scores', 'roi_labels']:
                     max_gt = max([x.shape[1] for x in val])
                     batch_gt_boxes3d = np.zeros((batch_size, val[0].shape[0], max_gt), dtype=np.float32)
                     for k in range(batch_size):
-                        batch_gt_boxes3d[k,:, :val[k].shape[1]] = val[k]
+                        batch_gt_boxes3d[k, :, :val[k].shape[1]] = val[k]
                     ret[key] = batch_gt_boxes3d
 
                 elif key in ['gt_boxes2d']:
@@ -306,15 +323,15 @@ class DatasetTemplate(torch_data.Dataset):
                     pad_value = 0
                     points = []
                     for _points in val:
-                        pad_width = ((0, max_len-len(_points)), (0,0))
+                        pad_width = ((0, max_len - len(_points)), (0, 0))
                         points_pad = np.pad(_points,
-                                pad_width=pad_width,
-                                mode='constant',
-                                constant_values=pad_value)
+                                            pad_width=pad_width,
+                                            mode='constant',
+                                            constant_values=pad_value)
                         points.append(points_pad)
                     ret[key] = np.stack(points, axis=0)
                 elif key in ['camera_imgs']:
-                    ret[key] = torch.stack([torch.stack(imgs,dim=0) for imgs in val],dim=0)
+                    ret[key] = torch.stack([torch.stack(imgs, dim=0) for imgs in val], dim=0)
                 else:
                     ret[key] = np.stack(val, axis=0)
             except:
@@ -323,3 +340,4 @@ class DatasetTemplate(torch_data.Dataset):
 
         ret['batch_size'] = batch_size * batch_size_ratio
         return ret
+
